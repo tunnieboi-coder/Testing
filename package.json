@@ -1,0 +1,15 @@
+{
+  "name": "compliance-tracker",
+  "version": "1.0.0",
+  "description": "Enterprise GRC Platform - NIST 800-53 Rev 5 & ISO 27001",
+  "private": true,
+  "workspaces": ["frontend", "backend"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
+    "build": "npm run build --workspace=frontend && npm run build --workspace=backend",
+    "install:all": "npm install && npm install --workspace=frontend && npm install --workspace=backend"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
