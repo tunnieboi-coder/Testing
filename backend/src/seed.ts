@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { NIST_FAMILIES, NIST_CONTROLS } from './data/nist-800-53-families';
 import { ISO_DOMAINS, ISO_CONTROLS, NIST_ISO_MAPPING } from './data/iso-27001';
 import { CONTROL_CIA_PROFILES } from './data/nist-cia-testing';
+import NIST_800_60_TYPES from './data/nist-800-60';
 
 initDb();
 
@@ -101,6 +102,12 @@ db.exec(`
   DELETE FROM compliance_snapshots;
   DELETE FROM risk_snapshots;
   DELETE FROM technical_profile;
+  DELETE FROM system_information_types;
+  DELETE FROM assessment_step_results;
+  DELETE FROM control_inheritance;
+  DELETE FROM system_control_implementations;
+  DELETE FROM systems;
+  DELETE FROM nist_800_60_types;
 `);
 
 // Insert frameworks
@@ -440,6 +447,51 @@ for (const update of statusUpdates) {
   }
 }
 
+// ─── Seed NIST 800-60 information types ──────────────────────────────────────
+const insertType = db.prepare(`
+  INSERT INTO nist_800_60_types
+    (id, identifier, name, description, section, section_name, category,
+     confidentiality_impact, integrity_impact, availability_impact, rationale)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+for (const t of NIST_800_60_TYPES) {
+  insertType.run(uuidv4(), t.identifier, t.name, t.description || null,
+    t.section, t.section_name, t.category,
+    t.confidentiality_impact, t.integrity_impact, t.availability_impact, t.rationale || null);
+}
+
+// ─── Seed default system ─────────────────────────────────────────────────────
+const defaultSystemId = uuidv4();
+db.prepare(`
+  INSERT INTO systems
+    (id, name, description, system_type, status, system_owner, authorizing_official,
+     organization, boundary_description, security_category_confidentiality,
+     security_category_integrity, security_category_availability, impact_level, applicable_baseline)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`).run(
+  defaultSystemId,
+  'Enterprise GRC Platform',
+  'Primary GRC information system supporting governance, risk, and compliance operations for the organization.',
+  'major_application',
+  'assessment_in_progress',
+  'Chief Information Security Officer',
+  'Chief Information Officer',
+  'TrustOps Inc.',
+  'Web application and supporting API backend hosted on cloud infrastructure. Processes compliance data, risk records, and audit findings.',
+  'Moderate', 'Moderate', 'Low', 'Moderate', 'Moderate',
+);
+
+// Seed some default information types for the default system
+const itTypesForDefault = ['C.2.7.4', 'C.2.7.7', 'C.3.2.1', 'C.3.2.2'];
+for (const identifier of itTypesForDefault) {
+  const typeRow = db.prepare('SELECT id FROM nist_800_60_types WHERE identifier = ?').get(identifier) as { id: string } | undefined;
+  if (typeRow) {
+    db.prepare(`
+      INSERT INTO system_information_types (id, system_id, type_id) VALUES (?, ?, ?)
+    `).run(uuidv4(), defaultSystemId, typeRow.id);
+  }
+}
+
 console.log('✅ Database seeded successfully!');
 console.log(`  - ${NIST_CONTROLS.length} NIST 800-53 Rev 5 controls`);
 console.log(`  - ${ISO_CONTROLS.length} ISO 27001 controls`);
@@ -448,5 +500,7 @@ console.log(`  - ${risks.length} sample risks`);
 console.log(`  - ${vendors.length} vendors`);
 console.log(`  - ${policies.length} policies`);
 console.log(`  - ${assets.length} assets`);
+console.log(`  - ${NIST_800_60_TYPES.length} NIST 800-60 information types`);
+console.log(`  - 1 default system seeded`);
 console.log(`  - Historical trend data generated (12 months)`);
 console.log(`  - ${profileQuestions.length} technical profile questions`);

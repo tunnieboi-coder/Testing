@@ -275,6 +275,117 @@ export function initDb() {
       content TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- Information systems under assessment (unlimited, each with own scoped data)
+    CREATE TABLE IF NOT EXISTS systems (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      system_type TEXT NOT NULL DEFAULT 'major_application',
+        -- 'major_application' | 'general_support_system' | 'minor_application'
+      status TEXT NOT NULL DEFAULT 'assessment_in_progress',
+        -- 'assessment_in_progress' | 'authorized' | 'under_review' | 'decommissioned'
+      system_owner TEXT,
+      authorizing_official TEXT,
+      organization TEXT,
+      boundary_description TEXT,
+      authorization_date TEXT,
+      reauthorization_date TEXT,
+      -- Computed/overridden security category (high-water mark from 800-60 types)
+      security_category_confidentiality TEXT DEFAULT 'Low',
+      security_category_integrity TEXT DEFAULT 'Low',
+      security_category_availability TEXT DEFAULT 'Low',
+      impact_level TEXT DEFAULT 'Low',      -- 'Low' | 'Moderate' | 'High'
+      applicable_baseline TEXT DEFAULT 'Low', -- 'Low' | 'Moderate' | 'High'
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Per-system control implementation status (overrides global controls.status)
+    CREATE TABLE IF NOT EXISTS system_control_implementations (
+      id TEXT PRIMARY KEY,
+      system_id TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+      control_id TEXT NOT NULL REFERENCES controls(id),
+      status TEXT NOT NULL DEFAULT 'not_implemented',
+        -- 'not_implemented' | 'in_progress' | 'implemented' | 'not_applicable'
+      implementation_notes TEXT,
+      responsible_team TEXT,
+      due_date TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(system_id, control_id)
+    );
+
+    -- Control inheritance: tracks whether a control is system-specific, inherited, or hybrid
+    CREATE TABLE IF NOT EXISTS control_inheritance (
+      id TEXT PRIMARY KEY,
+      system_id TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+      control_id TEXT NOT NULL REFERENCES controls(id),
+      implementation_type TEXT NOT NULL DEFAULT 'system_specific',
+        -- 'system_specific' | 'inherited' | 'hybrid'
+      provider_name TEXT,           -- e.g. "AWS GovCloud", "DoD PKI", "Shared Services"
+      provider_type TEXT,           -- 'cloud_provider' | 'shared_service' | 'organization' | 'other'
+      provider_authorization TEXT,  -- ATO/P-ATO reference or authority
+      inherited_description TEXT,   -- what portion the provider implements
+      system_responsibility TEXT,   -- what this system is still responsible for
+      authorization_reference TEXT, -- MOU/ISA/SLA reference number
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(system_id, control_id)
+    );
+
+    -- Step-level assessment results per NIST 800-53A Rev 5
+    -- Each row captures one examine/interview/test step result for one assessment objective
+    CREATE TABLE IF NOT EXISTS assessment_step_results (
+      id TEXT PRIMARY KEY,
+      system_id TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+      control_id TEXT NOT NULL REFERENCES controls(id),
+      objective_id TEXT REFERENCES control_assessment_objectives(id),
+      procedure_id TEXT REFERENCES control_testing_procedures(id),
+      method TEXT NOT NULL,           -- 'examine' | 'interview' | 'test'
+      object_description TEXT,        -- specific artifact, person, or mechanism assessed
+      result TEXT NOT NULL DEFAULT 'not_assessed',
+        -- 'satisfied' | 'other_than_satisfied' | 'not_assessed'
+      finding_summary TEXT,           -- assessor's finding narrative
+      recommendation TEXT,            -- recommended corrective action
+      assessor TEXT,
+      assessed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- NIST SP 800-60 Vol 2 Rev 1 information types (seeded from standard)
+    CREATE TABLE IF NOT EXISTS nist_800_60_types (
+      id TEXT PRIMARY KEY,
+      identifier TEXT NOT NULL UNIQUE,  -- e.g. "C.2.1.0"
+      name TEXT NOT NULL,
+      description TEXT,
+      section TEXT NOT NULL,            -- top-level section (C.1, C.2, C.3)
+      section_name TEXT NOT NULL,       -- human label for the section
+      category TEXT NOT NULL,           -- subcategory label
+      confidentiality_impact TEXT NOT NULL DEFAULT 'Low',
+        -- 'Low' | 'Moderate' | 'High' | 'N/A'
+      integrity_impact TEXT NOT NULL DEFAULT 'Low',
+      availability_impact TEXT NOT NULL DEFAULT 'Low',
+      rationale TEXT,                   -- brief justification from the standard
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Per-system selected information types (from 800-60 catalog)
+    CREATE TABLE IF NOT EXISTS system_information_types (
+      id TEXT PRIMARY KEY,
+      system_id TEXT NOT NULL REFERENCES systems(id) ON DELETE CASCADE,
+      type_id TEXT NOT NULL REFERENCES nist_800_60_types(id),
+      confidentiality_override TEXT,    -- 'Low' | 'Moderate' | 'High' | null = use catalog default
+      integrity_override TEXT,
+      availability_override TEXT,
+      override_justification TEXT,      -- required when overriding
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(system_id, type_id)
+    );
   `);
 }
 

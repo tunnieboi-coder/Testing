@@ -14,6 +14,8 @@ import evidenceRouter from './routes/evidence';
 import integrationsRouter from './routes/integrations';
 import profileRouter from './routes/profile';
 import reportingRouter from './routes/reporting';
+import systemsRouter from './routes/systems';
+import categorizationRouter from './routes/categorization';
 
 initDb();
 
@@ -35,6 +37,8 @@ app.use('/api/evidence', evidenceRouter);
 app.use('/api/integrations', integrationsRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/reporting', reportingRouter);
+app.use('/api/systems', systemsRouter);
+app.use('/api/categorization', categorizationRouter);
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

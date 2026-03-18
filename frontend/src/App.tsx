@@ -15,6 +15,9 @@ import Evidence from './pages/Evidence';
 import Integrations from './pages/Integrations';
 import Profile from './pages/Profile';
 import Reports from './pages/Reports';
+import Systems from './pages/Systems';
+import SystemDetail from './pages/SystemDetail';
+import SecurityCategorization from './pages/SecurityCategorization';
 
 export default function App() {
   return (
@@ -37,6 +40,9 @@ export default function App() {
           <Route path="integrations" element={<Integrations />} />
           <Route path="profile" element={<Profile />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="systems" element={<Systems />} />
+          <Route path="systems/:id" element={<SystemDetail />} />
+          <Route path="categorization" element={<SecurityCategorization />} />
         </Route>
       </Routes>
     </BrowserRouter>
