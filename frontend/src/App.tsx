@@ -22,6 +22,7 @@ import SystemDetail from './pages/SystemDetail';
 import SecurityCategorization from './pages/SecurityCategorization';
 import BusinessProfile from './pages/BusinessProfile';
 import AuditTrail from './pages/AuditTrail';
+import RolesPermissions from './pages/RolesPermissions';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -82,6 +83,7 @@ function AppRoutes() {
         <Route path="categorization" element={<SecurityCategorization />} />
         <Route path="business-profile" element={<BusinessProfile />} />
         <Route path="audit-trail" element={<AuditTrail />} />
+        <Route path="roles" element={<RolesPermissions />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import db from '../db';
 
 export const JWT_SECRET = process.env.JWT_SECRET || 'grc-platform-dev-secret-change-in-production';
 export const JWT_EXPIRES_IN = '8h';
@@ -43,3 +44,26 @@ export function requireRole(...roles: string[]) {
     next();
   };
 }
+
+/**
+ * Enforce Segregation of Duties via the role_permissions table.
+ * Usage: requirePermission('audit', 'create')
+ */
+export function requirePermission(resource: string, action: string) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+    const allowed = db.prepare(
+      'SELECT id FROM role_permissions WHERE role = ? AND resource = ? AND action = ?'
+    ).get(req.user.role, resource, action);
+    if (!allowed) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        detail: `Role '${req.user.role}' cannot perform '${action}' on '${resource}'`,
+      });
+    }
+    next();
+  };
+}
+
+export const ALL_ROLES = ['admin', 'compliance_manager', 'risk_owner', 'risk_approver', 'auditor', 'control_owner', 'reviewer', 'viewer'] as const;
+export type AppRole = typeof ALL_ROLES[number];

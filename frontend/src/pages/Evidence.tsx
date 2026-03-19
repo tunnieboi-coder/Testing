@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Database, Plus, X, ExternalLink } from 'lucide-react';
+import { Database, Plus, X, ExternalLink, Sparkles, CheckCircle2, AlertTriangle, HelpCircle, MinusCircle } from 'lucide-react';
 import api from '../lib/api';
 import { statusColor, formatDate } from '../lib/utils';
 
@@ -8,7 +8,28 @@ interface Evidence {
   id: string; title: string; description: string; type: string; source: string;
   url: string; status: string; collected_at: string; expires_at: string;
   collected_by: string; mapped_controls: string;
+  ai_confidence: number | null;
+  ai_verdict: 'satisfies' | 'partial' | 'insufficient' | 'unclear' | null;
+  ai_summary: string | null;
+  ai_gaps: string | null;
+  ai_reviewed_at: string | null;
+  review_notes: string | null;
 }
+
+interface AIReviewResult {
+  confidence: number;
+  verdict: 'satisfies' | 'partial' | 'insufficient' | 'unclear';
+  summary: string;
+  gaps: string[];
+  reviewed_at: string;
+}
+
+const VERDICT_CONFIG = {
+  satisfies:    { icon: <CheckCircle2 size={12} />, color: 'text-emerald-400', bg: 'bg-emerald-900/30 border-emerald-800/50', label: 'Satisfies' },
+  partial:      { icon: <MinusCircle size={12} />,  color: 'text-amber-400',   bg: 'bg-amber-900/30 border-amber-800/50',   label: 'Partial' },
+  insufficient: { icon: <AlertTriangle size={12} />,color: 'text-red-400',     bg: 'bg-red-900/30 border-red-800/50',       label: 'Insufficient' },
+  unclear:      { icon: <HelpCircle size={12} />,   color: 'text-slate-400',   bg: 'bg-slate-800 border-slate-700',         label: 'Unclear' },
+};
 
 const typeColors: Record<string, string> = {
   document: 'text-blue-400', screenshot: 'text-purple-400', config: 'text-emerald-400',
@@ -21,6 +42,21 @@ export default function Evidence() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [form, setForm] = useState({ title: '', description: '', type: 'document', source: 'manual', url: '', expires_at: '', collected_by: '' });
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState<Record<string, AIReviewResult>>({});
+
+  const aiReviewMutation = useMutation({
+    mutationFn: (id: string) => {
+      setReviewingId(id);
+      return api.post(`/evidence/${id}/ai-review`, {}) as Promise<AIReviewResult>;
+    },
+    onSuccess: (data, id) => {
+      setAiResult(r => ({ ...r, [id]: data }));
+      setReviewingId(null);
+      qc.invalidateQueries({ queryKey: ['evidence'] });
+    },
+    onError: () => setReviewingId(null),
+  });
 
   const { data: evidence = [] } = useQuery<Evidence[]>({
     queryKey: ['evidence', search, typeFilter],
@@ -84,6 +120,7 @@ export default function Evidence() {
               <th className="table-header p-3 text-left hidden lg:table-cell">Controls</th>
               <th className="table-header p-3 text-left hidden lg:table-cell w-28">Collected</th>
               <th className="table-header p-3 text-left w-28">Status</th>
+              <th className="table-header p-3 text-left w-44 hidden xl:table-cell">AI Review</th>
             </tr>
           </thead>
           <tbody>
@@ -104,6 +141,54 @@ export default function Evidence() {
                 <td className="p-3 hidden lg:table-cell text-xs text-slate-500">{formatDate(ev.collected_at)}</td>
                 <td className="p-3">
                   <span className={`badge text-xs ${statusColor(ev.status)}`}>{ev.status.replace('_', ' ')}</span>
+                </td>
+                <td className="p-3 hidden xl:table-cell">
+                  {(() => {
+                    const cached = aiResult[ev.id];
+                    const verdict = cached?.verdict ?? ev.ai_verdict;
+                    const confidence = cached?.confidence ?? ev.ai_confidence;
+                    const summary = cached?.summary ?? ev.ai_summary;
+                    const gaps: string[] = cached?.gaps ?? (ev.ai_gaps ? JSON.parse(ev.ai_gaps) : []);
+                    const cfg = verdict ? VERDICT_CONFIG[verdict] : null;
+                    const isLoading = reviewingId === ev.id;
+
+                    if (isLoading) {
+                      return (
+                        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                          <Sparkles size={12} className="text-primary-400 animate-pulse" />
+                          Reviewing…
+                        </div>
+                      );
+                    }
+
+                    if (cfg && verdict) {
+                      return (
+                        <div className="space-y-1">
+                          <div className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded border ${cfg.bg} ${cfg.color}`}>
+                            {cfg.icon}
+                            {cfg.label}
+                            <span className="ml-1 opacity-70">{confidence}%</span>
+                          </div>
+                          {summary && <div className="text-xs text-slate-500 leading-relaxed max-w-[180px] line-clamp-2">{summary}</div>}
+                          {gaps.length > 0 && (
+                            <div className="text-xs text-red-400/70">
+                              {gaps.length} gap{gaps.length > 1 ? 's' : ''} identified
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <button
+                        onClick={() => aiReviewMutation.mutate(ev.id)}
+                        className="btn-ghost text-xs flex items-center gap-1 text-slate-500 hover:text-primary-400"
+                      >
+                        <Sparkles size={11} />
+                        AI Review
+                      </button>
+                    );
+                  })()}
                 </td>
               </tr>
             ))}

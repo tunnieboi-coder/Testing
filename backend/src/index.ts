@@ -6,6 +6,7 @@ import { requireAuth } from './middleware/auth';
 import authRouter from './routes/auth';
 import businessProfileRouter from './routes/business-profile';
 import changeLogRouter from './routes/changeLog';
+import rolesRouter from './routes/roles';
 import dashboardRouter from './routes/dashboard';
 import frameworksRouter from './routes/frameworks';
 import controlsRouter from './routes/controls';
@@ -41,6 +42,7 @@ app.use(requireAuth);
 
 app.use('/api/business-profile', businessProfileRouter);
 app.use('/api/change-log', changeLogRouter);
+app.use('/api/roles', rolesRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/frameworks', frameworksRouter);
 app.use('/api/controls', controlsRouter);

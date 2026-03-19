@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { FileText, Plus, X, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { FileText, Plus, X, Clock, CheckCircle2, AlertTriangle, UserCheck, Users } from 'lucide-react';
 import api from '../lib/api';
 import { statusColor, formatDate } from '../lib/utils';
+import { formatDistanceToNow } from 'date-fns';
 
 interface Policy {
   id: string; title: string; description: string; category: string;
@@ -19,9 +20,18 @@ const categoryColors: Record<string, string> = {
   operational: 'text-cyan-400 bg-cyan-900/30 border-cyan-800/40',
 };
 
+interface Acknowledgment {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  acknowledged_at: string;
+}
+
 export default function Policies() {
   const qc = useQueryClient();
   const [showModal, setShowModal] = useState(false);
+  const [ackPolicy, setAckPolicy] = useState<Policy | null>(null);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -46,6 +56,17 @@ export default function Policies() {
   const updateMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: Record<string, unknown> }) => api.patch(`/policies/${id}`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['policies'] }),
+  });
+
+  const acknowledgeMutation = useMutation({
+    mutationFn: (policyId: string) => api.post(`/policies/${policyId}/acknowledge`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['policy-acks', ackPolicy?.id] }),
+  });
+
+  const { data: ackData } = useQuery<{ policy: Policy; acknowledgments: Acknowledgment[]; count: number }>({
+    queryKey: ['policy-acks', ackPolicy?.id],
+    queryFn: () => api.get(`/policies/${ackPolicy!.id}/acknowledgments`),
+    enabled: !!ackPolicy,
   });
 
   const overdueCount = policies.filter(p => p.status === 'published' && p.next_review_at && new Date(p.next_review_at) < new Date()).length;
@@ -122,13 +143,24 @@ export default function Policies() {
                     {formatDate(policy.next_review_at)}
                   </td>
                   <td className="p-3">
-                    <select
-                      value={policy.status}
-                      onChange={e => updateMutation.mutate({ id: policy.id, body: { status: e.target.value } })}
-                      className={`text-xs bg-transparent border-0 outline-none cursor-pointer font-medium ${policy.status === 'published' ? 'text-emerald-400' : policy.status === 'review' ? 'text-amber-400' : policy.status === 'draft' ? 'text-slate-400' : 'text-slate-500'}`}
-                    >
-                      {['draft', 'review', 'approved', 'published', 'archived'].map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={policy.status}
+                        onChange={e => updateMutation.mutate({ id: policy.id, body: { status: e.target.value } })}
+                        className={`text-xs bg-transparent border-0 outline-none cursor-pointer font-medium ${policy.status === 'published' ? 'text-emerald-400' : policy.status === 'review' ? 'text-amber-400' : policy.status === 'draft' ? 'text-slate-400' : 'text-slate-500'}`}
+                      >
+                        {['draft', 'review', 'approved', 'published', 'archived'].map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      {policy.status === 'published' && (
+                        <button
+                          onClick={() => setAckPolicy(policy)}
+                          className="btn-ghost p-1 text-slate-500 hover:text-emerald-400"
+                          title="View / acknowledge"
+                        >
+                          <Users size={13} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -136,6 +168,54 @@ export default function Policies() {
           </tbody>
         </table>
       </div>
+
+      {/* Acknowledgments modal */}
+      {ackPolicy && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="card w-full max-w-lg p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold flex items-center gap-2">
+                  <UserCheck size={16} className="text-emerald-400" />
+                  Policy Acknowledgments
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">{ackPolicy.title} · v{ackPolicy.version}</p>
+              </div>
+              <button onClick={() => setAckPolicy(null)} className="btn-ghost p-1.5"><X size={16} /></button>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-400">
+                <span className="text-emerald-400 font-semibold">{ackData?.count ?? 0}</span> acknowledgment{ackData?.count !== 1 ? 's' : ''}
+              </span>
+              <button
+                onClick={() => acknowledgeMutation.mutate(ackPolicy.id)}
+                disabled={acknowledgeMutation.isPending}
+                className="btn-primary text-xs"
+              >
+                <CheckCircle2 size={13} />
+                {acknowledgeMutation.isPending ? 'Acknowledging…' : 'I acknowledge this policy'}
+              </button>
+            </div>
+
+            <div className="max-h-64 overflow-y-auto space-y-1">
+              {!ackData?.acknowledgments.length ? (
+                <p className="text-sm text-slate-500 text-center py-6">No acknowledgments yet</p>
+              ) : ackData.acknowledgments.map(ack => (
+                <div key={ack.id} className="flex items-center justify-between py-2 border-b border-slate-800/50 last:border-0">
+                  <div>
+                    <div className="text-sm text-slate-200">{ack.user_name}</div>
+                    <div className="text-xs text-slate-500">{ack.user_email}</div>
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {formatDistanceToNow(new Date(ack.acknowledged_at), { addSuffix: true })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">

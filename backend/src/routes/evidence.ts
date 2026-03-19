@@ -3,6 +3,7 @@ import db from '../db';
 import { v4 as uuidv4 } from 'uuid';
 import { validate } from '../middleware/validate';
 import { CreateEvidenceSchema } from '../schemas';
+import { reviewEvidence } from '../lib/aiReview';
 
 const router = Router();
 
@@ -50,6 +51,68 @@ router.delete('/:id', (req, res) => {
   db.prepare('DELETE FROM control_evidence WHERE evidence_id = ?').run(req.params.id);
   db.prepare('DELETE FROM evidence WHERE id = ?').run(req.params.id);
   res.json({ success: true });
+});
+
+// POST /api/evidence/:id/ai-review — trigger AI review for this evidence item
+router.post('/:id/ai-review', async (req, res) => {
+  const ev = db.prepare('SELECT * FROM evidence WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
+  if (!ev) return res.status(404).json({ error: 'Evidence not found' });
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({ error: 'AI review unavailable: ANTHROPIC_API_KEY not configured' });
+  }
+
+  // Get linked control ids
+  const links = db.prepare('SELECT control_id FROM control_evidence WHERE evidence_id = ?').all(req.params.id) as { control_id: string }[];
+  const controlIds = links.map(l => l.control_id);
+
+  try {
+    const result = await reviewEvidence({
+      evidenceTitle: ev.title as string,
+      evidenceDescription: ev.description as string ?? '',
+      evidenceType: ev.type as string,
+      controlIds,
+    });
+
+    // Persist the review result
+    db.prepare(`
+      UPDATE evidence SET
+        ai_confidence = ?,
+        ai_verdict = ?,
+        ai_summary = ?,
+        ai_gaps = ?,
+        ai_reviewed_at = datetime('now'),
+        ai_reviewed_by = 'ai',
+        updated_at = datetime('now')
+      WHERE id = ?
+    `).run(
+      result.confidence,
+      result.verdict,
+      result.summary,
+      JSON.stringify(result.gaps),
+      req.params.id,
+    );
+
+    res.json({ ...result, reviewed_at: new Date().toISOString() });
+  } catch (err) {
+    console.error('AI review failed:', err);
+    res.status(500).json({ error: 'AI review failed', detail: String(err) });
+  }
+});
+
+// PATCH /api/evidence/:id/review — human reviewer override
+router.patch('/:id/review', (req, res) => {
+  const { verdict, confidence, notes } = req.body as { verdict?: string; confidence?: number; notes?: string };
+  const updates: Record<string, unknown> = {
+    ai_reviewed_by: req.user!.id,
+    ai_reviewed_at: new Date().toISOString(),
+  };
+  if (verdict) updates.ai_verdict = verdict;
+  if (confidence != null) updates.ai_confidence = Math.max(0, Math.min(100, confidence));
+  if (notes != null) updates.review_notes = notes;
+  const sets = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+  db.prepare(`UPDATE evidence SET ${sets}, updated_at = datetime('now') WHERE id = ?`).run(...Object.values(updates), req.params.id);
+  res.json(db.prepare('SELECT * FROM evidence WHERE id = ?').get(req.params.id));
 });
 
 router.get('/stats', (req, res) => {

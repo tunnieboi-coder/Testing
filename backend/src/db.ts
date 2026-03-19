@@ -74,6 +74,14 @@ export function initDb() {
       expires_at TEXT,
       status TEXT NOT NULL DEFAULT 'valid', -- 'valid' | 'expired' | 'review_needed'
       collected_by TEXT,
+      -- AI review fields
+      ai_confidence INTEGER,          -- 0-100 confidence that evidence satisfies its controls
+      ai_verdict TEXT,                -- 'satisfies' | 'partial' | 'insufficient' | 'unclear'
+      ai_summary TEXT,                -- brief AI rationale
+      ai_gaps TEXT,                   -- identified gaps (JSON array of strings)
+      ai_reviewed_at TEXT,            -- when AI last reviewed
+      ai_reviewed_by TEXT,            -- 'ai' | user id (human reviewer)
+      review_notes TEXT,              -- human override notes
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -132,6 +140,30 @@ export function initDb() {
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS policy_acknowledgments (
+      id TEXT PRIMARY KEY,
+      policy_id TEXT NOT NULL REFERENCES policies(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      user_name TEXT,
+      user_email TEXT,
+      acknowledged_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(policy_id, user_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_policy_ack_policy ON policy_acknowledgments(policy_id);
+    CREATE INDEX IF NOT EXISTS idx_policy_ack_user ON policy_acknowledgments(user_id);
+
+    -- Segregation of Duties: per-action permission table
+    -- Each role has a set of allowed actions. Conflicting actions (e.g. create+approve)
+    -- are intentionally assigned to different roles to enforce SoD.
+    CREATE TABLE IF NOT EXISTS role_permissions (
+      id TEXT PRIMARY KEY,
+      role TEXT NOT NULL,
+      resource TEXT NOT NULL,  -- 'control' | 'risk' | 'audit' | 'finding' | 'policy' | 'vendor' | 'evidence' | 'user'
+      action TEXT NOT NULL,    -- 'create' | 'read' | 'update' | 'delete' | 'approve' | 'publish' | 'assign' | 'remediate'
+      UNIQUE(role, resource, action)
     );
 
     CREATE TABLE IF NOT EXISTS policies (
@@ -480,6 +512,119 @@ export function initDb() {
     for (const q of BUSINESS_QUESTIONS) {
       db.prepare(`INSERT INTO business_questions (id, question, description, category, risk_multiplier, sort_order) VALUES (?, ?, ?, ?, ?, ?)`)
         .run(uuidv4bq(), q.question, q.description, q.category, q.multiplier, q.sort);
+    }
+  }
+
+  // Seed role permissions (SoD-aware)
+  const rpCount = (db.prepare('SELECT COUNT(*) as c FROM role_permissions').get() as { c: number }).c;
+  if (rpCount === 0) {
+    const { v4: uuidv4rp } = require('uuid');
+    // SoD rules enforced:
+    //  - auditor creates findings; reviewer/compliance_manager remediates (auditor ≠ remediator)
+    //  - risk_owner proposes treatment; risk_approver accepts (proposer ≠ approver)
+    //  - control_owner submits evidence; reviewer approves (submitter ≠ approver)
+    //  - compliance_manager publishes policies; cannot audit against them (author ≠ auditor)
+    //  - admin manages users/system; cannot perform GRC operations
+    const PERMISSIONS: Array<{ role: string; resource: string; action: string }> = [
+      // ── admin: user & system management only ──────────────────────────────
+      { role: 'admin', resource: 'user',    action: 'create'    },
+      { role: 'admin', resource: 'user',    action: 'read'      },
+      { role: 'admin', resource: 'user',    action: 'update'    },
+      { role: 'admin', resource: 'user',    action: 'delete'    },
+      { role: 'admin', resource: 'system',  action: 'read'      },
+      { role: 'admin', resource: 'system',  action: 'update'    },
+      // ── compliance_manager: GRC operations; cannot audit ──────────────────
+      { role: 'compliance_manager', resource: 'control',  action: 'create'    },
+      { role: 'compliance_manager', resource: 'control',  action: 'read'      },
+      { role: 'compliance_manager', resource: 'control',  action: 'update'    },
+      { role: 'compliance_manager', resource: 'control',  action: 'delete'    },
+      { role: 'compliance_manager', resource: 'control',  action: 'assign'    },
+      { role: 'compliance_manager', resource: 'control',  action: 'approve'   },
+      { role: 'compliance_manager', resource: 'risk',     action: 'read'      },
+      { role: 'compliance_manager', resource: 'risk',     action: 'update'    },
+      { role: 'compliance_manager', resource: 'policy',   action: 'create'    },
+      { role: 'compliance_manager', resource: 'policy',   action: 'read'      },
+      { role: 'compliance_manager', resource: 'policy',   action: 'update'    },
+      { role: 'compliance_manager', resource: 'policy',   action: 'delete'    },
+      { role: 'compliance_manager', resource: 'policy',   action: 'publish'   },
+      { role: 'compliance_manager', resource: 'evidence', action: 'read'      },
+      { role: 'compliance_manager', resource: 'evidence', action: 'approve'   },
+      { role: 'compliance_manager', resource: 'vendor',   action: 'create'    },
+      { role: 'compliance_manager', resource: 'vendor',   action: 'read'      },
+      { role: 'compliance_manager', resource: 'vendor',   action: 'update'    },
+      { role: 'compliance_manager', resource: 'vendor',   action: 'delete'    },
+      { role: 'compliance_manager', resource: 'asset',    action: 'create'    },
+      { role: 'compliance_manager', resource: 'asset',    action: 'read'      },
+      { role: 'compliance_manager', resource: 'asset',    action: 'update'    },
+      { role: 'compliance_manager', resource: 'asset',    action: 'delete'    },
+      { role: 'compliance_manager', resource: 'audit',    action: 'read'      },
+      { role: 'compliance_manager', resource: 'finding',  action: 'read'      },
+      { role: 'compliance_manager', resource: 'finding',  action: 'remediate' }, // can close findings, but cannot create them
+      // ── risk_owner: proposes risks; cannot approve ─────────────────────────
+      { role: 'risk_owner', resource: 'risk',    action: 'create'    },
+      { role: 'risk_owner', resource: 'risk',    action: 'read'      },
+      { role: 'risk_owner', resource: 'risk',    action: 'update'    },
+      { role: 'risk_owner', resource: 'control', action: 'read'      },
+      { role: 'risk_owner', resource: 'audit',   action: 'read'      },
+      { role: 'risk_owner', resource: 'finding', action: 'read'      },
+      { role: 'risk_owner', resource: 'evidence',action: 'read'      },
+      { role: 'risk_owner', resource: 'policy',  action: 'read'      },
+      { role: 'risk_owner', resource: 'vendor',  action: 'read'      },
+      // ── risk_approver: accepts risk; cannot create ─────────────────────────
+      { role: 'risk_approver', resource: 'risk',    action: 'read'      },
+      { role: 'risk_approver', resource: 'risk',    action: 'update'    },
+      { role: 'risk_approver', resource: 'risk',    action: 'approve'   },
+      { role: 'risk_approver', resource: 'control', action: 'read'      },
+      { role: 'risk_approver', resource: 'audit',   action: 'read'      },
+      { role: 'risk_approver', resource: 'finding', action: 'read'      },
+      // ── auditor: creates audits & findings; cannot remediate ───────────────
+      { role: 'auditor', resource: 'audit',   action: 'create'    },
+      { role: 'auditor', resource: 'audit',   action: 'read'      },
+      { role: 'auditor', resource: 'audit',   action: 'update'    },
+      { role: 'auditor', resource: 'finding', action: 'create'    },
+      { role: 'auditor', resource: 'finding', action: 'read'      },
+      { role: 'auditor', resource: 'finding', action: 'update'    },
+      // SoD: auditor explicitly CANNOT 'remediate' findings
+      { role: 'auditor', resource: 'control', action: 'read'      },
+      { role: 'auditor', resource: 'risk',    action: 'read'      },
+      { role: 'auditor', resource: 'evidence',action: 'read'      },
+      { role: 'auditor', resource: 'policy',  action: 'read'      },
+      { role: 'auditor', resource: 'vendor',  action: 'read'      },
+      { role: 'auditor', resource: 'asset',   action: 'read'      },
+      // ── control_owner: implements controls, submits evidence; cannot approve
+      { role: 'control_owner', resource: 'control',  action: 'read'      },
+      { role: 'control_owner', resource: 'control',  action: 'update'    },
+      { role: 'control_owner', resource: 'evidence', action: 'create'    },
+      { role: 'control_owner', resource: 'evidence', action: 'read'      },
+      { role: 'control_owner', resource: 'risk',     action: 'read'      },
+      { role: 'control_owner', resource: 'audit',    action: 'read'      },
+      { role: 'control_owner', resource: 'finding',  action: 'read'      },
+      { role: 'control_owner', resource: 'policy',   action: 'read'      },
+      // ── reviewer: approves evidence & controls; cannot create them ─────────
+      { role: 'reviewer', resource: 'control',  action: 'read'      },
+      { role: 'reviewer', resource: 'control',  action: 'approve'   },
+      { role: 'reviewer', resource: 'evidence', action: 'read'      },
+      { role: 'reviewer', resource: 'evidence', action: 'approve'   },
+      { role: 'reviewer', resource: 'finding',  action: 'read'      },
+      { role: 'reviewer', resource: 'finding',  action: 'remediate' },
+      { role: 'reviewer', resource: 'risk',     action: 'read'      },
+      { role: 'reviewer', resource: 'risk',     action: 'approve'   },
+      { role: 'reviewer', resource: 'audit',    action: 'read'      },
+      { role: 'reviewer', resource: 'policy',   action: 'read'      },
+      { role: 'reviewer', resource: 'vendor',   action: 'read'      },
+      // ── viewer: read-only across everything ───────────────────────────────
+      { role: 'viewer', resource: 'control',  action: 'read' },
+      { role: 'viewer', resource: 'risk',     action: 'read' },
+      { role: 'viewer', resource: 'audit',    action: 'read' },
+      { role: 'viewer', resource: 'finding',  action: 'read' },
+      { role: 'viewer', resource: 'evidence', action: 'read' },
+      { role: 'viewer', resource: 'policy',   action: 'read' },
+      { role: 'viewer', resource: 'vendor',   action: 'read' },
+      { role: 'viewer', resource: 'asset',    action: 'read' },
+    ];
+    for (const p of PERMISSIONS) {
+      db.prepare(`INSERT OR IGNORE INTO role_permissions (id, role, resource, action) VALUES (?, ?, ?, ?)`)
+        .run(uuidv4rp(), p.role, p.resource, p.action);
     }
   }
 

@@ -73,7 +73,7 @@ const CreateUserSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(255),
   password: z.string().min(8),
-  role: z.enum(['admin', 'compliance_manager', 'auditor', 'viewer']),
+  role: z.enum(['admin', 'compliance_manager', 'risk_owner', 'risk_approver', 'auditor', 'control_owner', 'reviewer', 'viewer']),
   department: z.string().optional(),
 });
 

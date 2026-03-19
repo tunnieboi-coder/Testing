@@ -5,6 +5,7 @@ import { validate } from '../middleware/validate';
 import { CreateRiskSchema, UpdateRiskSchema } from '../schemas';
 import { getBusinessMultiplier } from '../lib/businessMultiplier';
 import { logChange, logFieldChanges } from '../lib/changeLog';
+import { requirePermission } from '../middleware/auth';
 
 const router = Router();
 
@@ -30,7 +31,8 @@ router.get('/', (req, res) => {
   res.json(risks);
 });
 
-router.post('/', validate(CreateRiskSchema), (req, res) => {
+// SoD: risk_owner creates; risk_approver approves (different people)
+router.post('/', requirePermission('risk', 'create'), validate(CreateRiskSchema), (req, res) => {
   const { title, description, category, likelihood, impact, owner, treatment, treatment_notes, due_date } = req.body;
   const id = uuidv4();
   db.prepare(`INSERT INTO risks (id, title, description, category, likelihood, impact, owner, treatment, treatment_notes, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
@@ -78,7 +80,7 @@ router.patch('/:id', validate(UpdateRiskSchema), (req, res) => {
   res.json(withEffectiveScore(risk, getBusinessMultiplier()));
 });
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requirePermission('risk', 'delete'), (req, res) => {
   const risk = db.prepare('SELECT title FROM risks WHERE id = ?').get(req.params.id) as { title: string } | undefined;
   db.prepare('DELETE FROM control_risks WHERE risk_id = ?').run(req.params.id);
   db.prepare('DELETE FROM risks WHERE id = ?').run(req.params.id);

@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { validate } from '../middleware/validate';
 import { CreatePolicySchema, UpdatePolicySchema } from '../schemas';
 import { logChange, logFieldChanges } from '../lib/changeLog';
+import { requirePermission } from '../middleware/auth';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ router.get('/', (req, res) => {
   res.json(db.prepare(query).all(...params));
 });
 
-router.post('/', validate(CreatePolicySchema), (req, res) => {
+router.post('/', requirePermission('policy', 'create'), validate(CreatePolicySchema), (req, res) => {
   const id = uuidv4();
   const { title, description, category, status, version, owner, approver, content, review_frequency } = req.body;
   const nextReview = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
@@ -35,14 +36,21 @@ router.get('/:id', (req, res) => {
   res.json(policy);
 });
 
-router.patch('/:id', validate(UpdatePolicySchema), (req, res) => {
+router.patch('/:id', requirePermission('policy', 'update'), validate(UpdatePolicySchema), (req, res) => {
   const fields = ['title', 'description', 'category', 'status', 'version', 'owner', 'approver', 'content', 'review_frequency', 'last_reviewed_at', 'next_review_at', 'published_at'];
   const updates: Record<string, unknown> = {};
   for (const f of fields) {
     if (req.body[f] !== undefined) updates[f] = req.body[f];
   }
-  if (req.body.status === 'published' && !updates.published_at) {
-    updates.published_at = new Date().toISOString();
+  // SoD: publishing requires explicit 'publish' permission (compliance_manager only)
+  if (req.body.status === 'published') {
+    const canPublish = db.prepare(
+      "SELECT id FROM role_permissions WHERE role = ? AND resource = 'policy' AND action = 'publish'"
+    ).get(req.user!.role);
+    if (!canPublish) {
+      return res.status(403).json({ error: 'Forbidden', detail: `Role '${req.user!.role}' cannot publish policies (SoD)` });
+    }
+    if (!updates.published_at) updates.published_at = new Date().toISOString();
   }
   if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields' });
   const before = db.prepare('SELECT * FROM policies WHERE id = ?').get(req.params.id) as Record<string, unknown>;
@@ -52,11 +60,50 @@ router.patch('/:id', validate(UpdatePolicySchema), (req, res) => {
   res.json(db.prepare('SELECT * FROM policies WHERE id = ?').get(req.params.id));
 });
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', requirePermission('policy', 'delete'), (req, res) => {
   const policy = db.prepare('SELECT title FROM policies WHERE id = ?').get(req.params.id) as { title: string } | undefined;
   db.prepare('DELETE FROM policies WHERE id = ?').run(req.params.id);
   logChange({ entityType: 'policy', entityId: req.params.id, entityLabel: policy?.title, action: 'delete', user: req.user! });
   res.json({ success: true });
+});
+
+// ── Policy Acknowledgments ───────────────────────────────────────────────────
+
+// GET /api/policies/:id/acknowledgments — who has acknowledged this policy
+router.get('/:id/acknowledgments', (req, res) => {
+  const rows = db.prepare(
+    'SELECT * FROM policy_acknowledgments WHERE policy_id = ? ORDER BY acknowledged_at DESC'
+  ).all(req.params.id);
+  const policy = db.prepare('SELECT id, title, version FROM policies WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
+  if (!policy) return res.status(404).json({ error: 'Not found' });
+  res.json({ policy, acknowledgments: rows, count: rows.length });
+});
+
+// POST /api/policies/:id/acknowledge — current user acknowledges this policy
+router.post('/:id/acknowledge', (req, res) => {
+  const policy = db.prepare('SELECT id, status FROM policies WHERE id = ?').get(req.params.id) as { id: string; status: string } | undefined;
+  if (!policy) return res.status(404).json({ error: 'Policy not found' });
+  if (policy.status !== 'published') return res.status(400).json({ error: 'Can only acknowledge published policies' });
+
+  db.prepare(`
+    INSERT INTO policy_acknowledgments (id, policy_id, user_id, user_name, user_email)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(policy_id, user_id) DO UPDATE SET acknowledged_at = datetime('now'), user_name = excluded.user_name, user_email = excluded.user_email
+  `).run(uuidv4(), req.params.id, req.user!.id, req.user!.name, req.user!.email);
+
+  res.json({ success: true, acknowledged_at: new Date().toISOString() });
+});
+
+// GET /api/policies/my-acknowledgments — policies the current user has acknowledged
+router.get('/my/acknowledgments', (req, res) => {
+  const rows = db.prepare(`
+    SELECT pa.*, p.title, p.version, p.category
+    FROM policy_acknowledgments pa
+    JOIN policies p ON p.id = pa.policy_id
+    WHERE pa.user_id = ?
+    ORDER BY pa.acknowledged_at DESC
+  `).all(req.user!.id);
+  res.json(rows);
 });
 
 export default router;
