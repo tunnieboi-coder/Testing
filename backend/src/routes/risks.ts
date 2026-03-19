@@ -3,8 +3,18 @@ import db from '../db';
 import { v4 as uuidv4 } from 'uuid';
 import { validate } from '../middleware/validate';
 import { CreateRiskSchema, UpdateRiskSchema } from '../schemas';
+import { getBusinessMultiplier } from '../lib/businessMultiplier';
 
 const router = Router();
+
+function withEffectiveScore(risk: Record<string, unknown>, multiplier: number) {
+  const base = (risk.risk_score as number) || 0;
+  return {
+    ...risk,
+    business_multiplier: multiplier,
+    effective_score: Math.min(100, Math.round(base * multiplier * 10) / 10),
+  };
+}
 
 router.get('/', (req, res) => {
   const { category, status, search } = req.query as Record<string, string>;
@@ -14,7 +24,8 @@ router.get('/', (req, res) => {
   if (status) { query += ' AND status = ?'; params.push(status); }
   if (search) { query += ' AND (title LIKE ? OR description LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
   query += ' ORDER BY risk_score DESC, created_at DESC';
-  const risks = db.prepare(query).all(...params);
+  const multiplier = getBusinessMultiplier();
+  const risks = (db.prepare(query).all(...params) as Record<string, unknown>[]).map(r => withEffectiveScore(r, multiplier));
   res.json(risks);
 });
 
@@ -24,14 +35,15 @@ router.post('/', validate(CreateRiskSchema), (req, res) => {
   db.prepare(`INSERT INTO risks (id, title, description, category, likelihood, impact, owner, treatment, treatment_notes, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     id, title, description, category, likelihood, impact, owner, treatment, treatment_notes, due_date
   );
-  res.json(db.prepare('SELECT * FROM risks WHERE id = ?').get(id));
+  const risk = db.prepare('SELECT * FROM risks WHERE id = ?').get(id) as Record<string, unknown>;
+  res.json(withEffectiveScore(risk, getBusinessMultiplier()));
 });
 
 router.get('/:id', (req, res) => {
-  const risk = db.prepare('SELECT * FROM risks WHERE id = ?').get(req.params.id);
+  const risk = db.prepare('SELECT * FROM risks WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
   if (!risk) return res.status(404).json({ error: 'Not found' });
   const controls = db.prepare(`SELECT c.id, c.identifier, c.title, c.status FROM controls c JOIN control_risks cr ON cr.control_id = c.id WHERE cr.risk_id = ?`).all(req.params.id);
-  res.json({ ...risk as object, controls });
+  res.json({ ...withEffectiveScore(risk, getBusinessMultiplier()), controls });
 });
 
 router.patch('/:id', validate(UpdateRiskSchema), (req, res) => {
@@ -58,7 +70,8 @@ router.patch('/:id', validate(UpdateRiskSchema), (req, res) => {
       .run(uuidv4(), today, critical, high, medium, low, total, Math.round(avg * 10) / 10);
   }
 
-  res.json(db.prepare('SELECT * FROM risks WHERE id = ?').get(req.params.id));
+  const risk = db.prepare('SELECT * FROM risks WHERE id = ?').get(req.params.id) as Record<string, unknown>;
+  res.json(withEffectiveScore(risk, getBusinessMultiplier()));
 });
 
 router.delete('/:id', (req, res) => {

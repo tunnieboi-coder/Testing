@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Shield, CheckSquare, AlertTriangle, Users,
   FileText, HardDrive, ClipboardList, Database, Zap, Settings,
-  BarChart3, BookOpen, SlidersHorizontal, Server, FolderLock,
+  BarChart3, SlidersHorizontal, Server, FolderLock, Briefcase,
   ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -28,6 +28,7 @@ const secondaryNav = [
   { label: 'Assets', icon: HardDrive, to: '/assets' },
   { label: 'Integrations', icon: Zap, to: '/integrations' },
   { label: 'Tech Profile', icon: SlidersHorizontal, to: '/profile' },
+  { label: 'Business Profile', icon: Briefcase, to: '/business-profile' },
   { label: 'Reports', icon: BarChart3, to: '/reports' },
 ];
 

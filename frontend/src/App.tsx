@@ -20,6 +20,7 @@ import Reports from './pages/Reports';
 import Systems from './pages/Systems';
 import SystemDetail from './pages/SystemDetail';
 import SecurityCategorization from './pages/SecurityCategorization';
+import BusinessProfile from './pages/BusinessProfile';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -78,6 +79,7 @@ function AppRoutes() {
         <Route path="systems" element={<Systems />} />
         <Route path="systems/:id" element={<SystemDetail />} />
         <Route path="categorization" element={<SecurityCategorization />} />
+        <Route path="business-profile" element={<BusinessProfile />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

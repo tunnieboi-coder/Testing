@@ -387,7 +387,61 @@ export function initDb() {
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(system_id, type_id)
     );
+
+    CREATE TABLE IF NOT EXISTS business_questions (
+      id TEXT PRIMARY KEY,
+      question TEXT NOT NULL,
+      description TEXT,
+      category TEXT NOT NULL, -- 'criticality' | 'data_sensitivity' | 'regulatory' | 'exposure' | 'financial'
+      answer TEXT, -- 'yes' | 'no' | null (unanswered)
+      risk_multiplier REAL NOT NULL DEFAULT 1.0, -- applied to all risk scores when answer = 'yes'
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
+
+  // Seed business questions if none exist
+  const bqCount = (db.prepare('SELECT COUNT(*) as c FROM business_questions').get() as { c: number }).c;
+  if (bqCount === 0) {
+    const { v4: uuidv4bq } = require('uuid');
+    const BUSINESS_QUESTIONS = [
+      { category: 'criticality', multiplier: 1.5, sort: 1,
+        question: 'Is this a mission-critical system where downtime directly disrupts core business operations?',
+        description: 'Mission-critical systems have the highest risk exposure. Incidents carry severe operational and financial consequences.' },
+      { category: 'criticality', multiplier: 1.3, sort: 2,
+        question: 'Would a breach or outage of this system result in significant revenue loss (>$100k)?',
+        description: 'Financial exposure amplifies the business impact of any risk materializing.' },
+      { category: 'data_sensitivity', multiplier: 1.4, sort: 3,
+        question: 'Does this system process or store Personally Identifiable Information (PII) or Protected Health Information (PHI)?',
+        description: 'Systems handling PII/PHI face heightened legal liability and regulatory penalties under GDPR, HIPAA, and similar laws.' },
+      { category: 'data_sensitivity', multiplier: 1.3, sort: 4,
+        question: 'Does this system handle payment card data (PCI-DSS in scope)?',
+        description: 'PCI-DSS non-compliance and card data breaches carry heavy fines and card brand penalties.' },
+      { category: 'data_sensitivity', multiplier: 1.2, sort: 5,
+        question: 'Does this system store or transmit trade secrets, intellectual property, or other proprietary business data?',
+        description: 'Loss or exfiltration of IP can have long-term competitive consequences.' },
+      { category: 'regulatory', multiplier: 1.3, sort: 6,
+        question: 'Is your organization subject to industry-specific regulations (HIPAA, FedRAMP, SOX, FFIEC, NERC CIP)?',
+        description: 'Regulatory frameworks impose mandatory security requirements; non-compliance can result in fines or loss of operating licenses.' },
+      { category: 'regulatory', multiplier: 1.2, sort: 7,
+        question: 'Does your organization have international data transfer obligations (e.g., GDPR cross-border transfers)?',
+        description: 'Cross-border data flows add legal complexity and increase the cost of incidents.' },
+      { category: 'exposure', multiplier: 1.2, sort: 8,
+        question: 'Does this system have publicly accessible internet-facing components (APIs, portals, services)?',
+        description: 'Internet exposure increases the attack surface and the likelihood of exploitation.' },
+      { category: 'exposure', multiplier: 1.2, sort: 9,
+        question: 'Do third-party vendors or partners have privileged access to this system?',
+        description: 'Third-party access introduces supply chain and insider threat risks that are harder to control.' },
+      { category: 'financial', multiplier: 1.2, sort: 10,
+        question: 'Is your organization publicly listed or subject to securities/financial reporting regulations (SOX)?',
+        description: 'Public companies face investor and regulatory scrutiny that magnifies the impact of security incidents on stock price and legal liability.' },
+    ];
+    for (const q of BUSINESS_QUESTIONS) {
+      db.prepare(`INSERT INTO business_questions (id, question, description, category, risk_multiplier, sort_order) VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(uuidv4bq(), q.question, q.description, q.category, q.multiplier, q.sort);
+    }
+  }
 
   // Seed default admin user if none exists
   // Password: Admin@123 (bcrypt hash)

@@ -14,6 +14,7 @@ const titles: Record<string, string> = {
   '/assets': 'Asset Inventory',
   '/integrations': 'Integrations',
   '/profile': 'Technical Profile',
+  '/business-profile': 'Business Risk Profile',
   '/reports': 'Reports & Analytics',
 };
 

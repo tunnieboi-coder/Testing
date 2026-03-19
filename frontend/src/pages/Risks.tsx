@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Plus, X, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Plus, X, TrendingUp, Info } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import { riskScoreBg, riskLabel, statusColor, formatDate } from '../lib/utils';
 
 interface Risk {
   id: string; title: string; description: string; category: string;
   likelihood: number; impact: number; risk_score: number;
+  effective_score: number; business_multiplier: number;
   status: string; owner: string; treatment: string; due_date: string;
   residual_likelihood: number; residual_impact: number;
 }
@@ -41,7 +43,9 @@ export default function Risks() {
   });
 
   const byCat = (risks || []).reduce<Record<string, number>>((acc, r) => { acc[r.category] = (acc[r.category] || 0) + 1; return acc; }, {});
-  const sorted = [...(risks || [])].sort((a, b) => b.risk_score - a.risk_score);
+  const sorted = [...(risks || [])].sort((a, b) => b.effective_score - a.effective_score);
+  const multiplier = risks?.[0]?.business_multiplier ?? 1.0;
+  const multiplierActive = multiplier > 1.0;
 
   return (
     <div className="space-y-5">
@@ -55,13 +59,26 @@ export default function Risks() {
         </button>
       </div>
 
-      {/* Summary Cards */}
+      {/* Business multiplier notice */}
+      {multiplierActive && (
+        <div className="flex items-center gap-3 bg-amber-900/20 border border-amber-800/50 rounded-lg px-4 py-3">
+          <TrendingUp size={15} className="text-amber-400 flex-shrink-0" />
+          <p className="text-xs text-amber-300 flex-1">
+            Business risk multiplier active: <strong>{multiplier.toFixed(2)}×</strong> — effective scores reflect your business profile.
+          </p>
+          <Link to="/business-profile" className="text-xs text-amber-400 underline hover:text-amber-300 flex-shrink-0">
+            Configure
+          </Link>
+        </div>
+      )}
+
+      {/* Summary Cards — based on effective score */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Critical', filter: (r: Risk) => r.risk_score >= 20 && r.status !== 'closed', color: 'text-red-400', bg: 'bg-red-900/20 border-red-900/40' },
-          { label: 'High', filter: (r: Risk) => r.risk_score >= 15 && r.risk_score < 20 && r.status !== 'closed', color: 'text-orange-400', bg: 'bg-orange-900/20 border-orange-900/40' },
-          { label: 'Medium', filter: (r: Risk) => r.risk_score >= 9 && r.risk_score < 15 && r.status !== 'closed', color: 'text-amber-400', bg: 'bg-amber-900/20 border-amber-900/40' },
-          { label: 'Low', filter: (r: Risk) => r.risk_score < 9 && r.status !== 'closed', color: 'text-emerald-400', bg: 'bg-emerald-900/20 border-emerald-900/40' },
+          { label: 'Critical', filter: (r: Risk) => r.effective_score >= 20 && r.status !== 'closed', color: 'text-red-400', bg: 'bg-red-900/20 border-red-900/40' },
+          { label: 'High', filter: (r: Risk) => r.effective_score >= 15 && r.effective_score < 20 && r.status !== 'closed', color: 'text-orange-400', bg: 'bg-orange-900/20 border-orange-900/40' },
+          { label: 'Medium', filter: (r: Risk) => r.effective_score >= 9 && r.effective_score < 15 && r.status !== 'closed', color: 'text-amber-400', bg: 'bg-amber-900/20 border-amber-900/40' },
+          { label: 'Low', filter: (r: Risk) => r.effective_score < 9 && r.status !== 'closed', color: 'text-emerald-400', bg: 'bg-emerald-900/20 border-emerald-900/40' },
         ].map(({ label, filter, color, bg }) => (
           <div key={label} className={`card p-4 border ${bg}`}>
             <div className={`text-2xl font-bold ${color}`}>{sorted.filter(filter).length}</div>
@@ -90,7 +107,7 @@ export default function Risks() {
             <tr className="border-b border-slate-800 bg-slate-900/50">
               <th className="table-header p-3 text-left">Risk</th>
               <th className="table-header p-3 text-center w-16">L×I</th>
-              <th className="table-header p-3 text-center w-24">Score</th>
+              <th className="table-header p-3 text-center w-32">Score</th>
               <th className="table-header p-3 text-left hidden md:table-cell w-28">Category</th>
               <th className="table-header p-3 text-left hidden lg:table-cell w-28">Owner</th>
               <th className="table-header p-3 text-left w-28">Status</th>
@@ -110,7 +127,14 @@ export default function Risks() {
                   <span className="font-mono text-xs text-slate-400">{risk.likelihood}×{risk.impact}</span>
                 </td>
                 <td className="p-3 text-center">
-                  <span className={`badge text-xs font-bold ${riskScoreBg(risk.risk_score)}`}>{risk.risk_score} — {riskLabel(risk.risk_score)}</span>
+                  <div className="flex flex-col items-center gap-0.5">
+                    <span className={`badge text-xs font-bold ${riskScoreBg(risk.effective_score)}`}>
+                      {risk.effective_score} — {riskLabel(risk.effective_score)}
+                    </span>
+                    {multiplierActive && (
+                      <span className="text-[10px] text-slate-600 font-mono">base {risk.risk_score}</span>
+                    )}
+                  </div>
                 </td>
                 <td className="p-3 hidden md:table-cell text-xs text-slate-400 capitalize">{risk.category}</td>
                 <td className="p-3 hidden lg:table-cell text-xs text-slate-400">{risk.owner || '—'}</td>
