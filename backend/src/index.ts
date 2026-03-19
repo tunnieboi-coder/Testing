@@ -1,7 +1,9 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { initDb } from './db';
+import { requireAuth } from './middleware/auth';
 
+import authRouter from './routes/auth';
 import dashboardRouter from './routes/dashboard';
 import frameworksRouter from './routes/frameworks';
 import controlsRouter from './routes/controls';
@@ -25,6 +27,16 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 
+// Public routes — no auth required
+app.use('/api/auth', authRouter);
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// All routes below require authentication
+app.use(requireAuth);
+
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/frameworks', frameworksRouter);
 app.use('/api/controls', controlsRouter);
@@ -40,8 +52,10 @@ app.use('/api/reporting', reportingRouter);
 app.use('/api/systems', systemsRouter);
 app.use('/api/categorization', categorizationRouter);
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// Global error handler
+app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 app.listen(PORT, () => {

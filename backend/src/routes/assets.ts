@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import db from '../db';
 import { v4 as uuidv4 } from 'uuid';
+import { validate } from '../middleware/validate';
+import { CreateAssetSchema, UpdateAssetSchema } from '../schemas';
 
 const router = Router();
 
@@ -18,7 +20,7 @@ router.get('/', (req, res) => {
   res.json(db.prepare(query).all(...params));
 });
 
-router.post('/', (req, res) => {
+router.post('/', validate(CreateAssetSchema), (req, res) => {
   const id = uuidv4();
   const { name, description, type, category, owner, custodian, location, classification, status, criticality, ip_address, hostname, os, version, vendor, purchase_date, end_of_life, tags } = req.body;
   db.prepare(`INSERT INTO assets (id, name, description, type, category, owner, custodian, location, classification, status, criticality, ip_address, hostname, os, version, vendor, purchase_date, end_of_life, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
@@ -33,7 +35,7 @@ router.get('/:id', (req, res) => {
   res.json(asset);
 });
 
-router.patch('/:id', (req, res) => {
+router.patch('/:id', validate(UpdateAssetSchema), (req, res) => {
   const fields = ['name', 'description', 'type', 'category', 'owner', 'custodian', 'location', 'classification', 'status', 'criticality', 'ip_address', 'hostname', 'os', 'version', 'vendor', 'purchase_date', 'end_of_life', 'tags'];
   const updates: Record<string, unknown> = {};
   for (const f of fields) {

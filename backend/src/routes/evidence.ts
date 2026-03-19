@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import db from '../db';
 import { v4 as uuidv4 } from 'uuid';
+import { validate } from '../middleware/validate';
+import { CreateEvidenceSchema } from '../schemas';
 
 const router = Router();
 
@@ -16,7 +18,7 @@ router.get('/', (req, res) => {
   res.json(db.prepare(query).all(...params));
 });
 
-router.post('/', (req, res) => {
+router.post('/', validate(CreateEvidenceSchema), (req, res) => {
   const id = uuidv4();
   const { title, description, type, source, url, collected_by, expires_at, control_ids } = req.body;
   db.prepare(`INSERT INTO evidence (id, title, description, type, source, url, collected_by, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(

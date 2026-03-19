@@ -231,6 +231,7 @@ export function initDb() {
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL DEFAULT '',
       name TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'viewer', -- 'admin' | 'compliance_manager' | 'auditor' | 'viewer'
       department TEXT,
@@ -387,6 +388,18 @@ export function initDb() {
       UNIQUE(system_id, type_id)
     );
   `);
+
+  // Seed default admin user if none exists
+  // Password: Admin@123 (bcrypt hash)
+  const adminExists = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@trustops.local');
+  if (!adminExists) {
+    const { v4: uuidv4 } = require('uuid');
+    const bcrypt = require('bcryptjs');
+    const hash = bcrypt.hashSync('Admin@123', 10);
+    db.prepare(
+      `INSERT INTO users (id, email, password_hash, name, role, department, active) VALUES (?, ?, ?, ?, ?, ?, 1)`
+    ).run(uuidv4(), 'admin@trustops.local', hash, 'Platform Admin', 'admin', 'IT Security');
+  }
 }
 
 export default db;

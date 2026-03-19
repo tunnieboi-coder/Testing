@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import db from '../db';
 import { v4 as uuidv4 } from 'uuid';
+import { validate } from '../middleware/validate';
+import { CreateRiskSchema, UpdateRiskSchema } from '../schemas';
 
 const router = Router();
 
@@ -16,7 +18,7 @@ router.get('/', (req, res) => {
   res.json(risks);
 });
 
-router.post('/', (req, res) => {
+router.post('/', validate(CreateRiskSchema), (req, res) => {
   const { title, description, category, likelihood, impact, owner, treatment, treatment_notes, due_date } = req.body;
   const id = uuidv4();
   db.prepare(`INSERT INTO risks (id, title, description, category, likelihood, impact, owner, treatment, treatment_notes, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
@@ -32,7 +34,7 @@ router.get('/:id', (req, res) => {
   res.json({ ...risk as object, controls });
 });
 
-router.patch('/:id', (req, res) => {
+router.patch('/:id', validate(UpdateRiskSchema), (req, res) => {
   const fields = ['title', 'description', 'category', 'likelihood', 'impact', 'status', 'owner', 'treatment', 'treatment_notes', 'residual_likelihood', 'residual_impact', 'due_date'];
   const updates: Record<string, unknown> = {};
   for (const f of fields) {

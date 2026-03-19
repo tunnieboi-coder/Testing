@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import db from '../db';
 import { v4 as uuidv4 } from 'uuid';
+import { validate } from '../middleware/validate';
+import { CreateAuditSchema, UpdateAuditSchema, CreateFindingSchema, UpdateFindingSchema } from '../schemas';
 
 const router = Router();
 
@@ -9,7 +11,7 @@ router.get('/', (req, res) => {
   res.json(audits);
 });
 
-router.post('/', (req, res) => {
+router.post('/', validate(CreateAuditSchema), (req, res) => {
   const id = uuidv4();
   const { title, description, type, framework_id, status, auditor, auditor_firm, scope, start_date, end_date } = req.body;
   db.prepare(`INSERT INTO audits (id, title, description, type, framework_id, status, auditor, auditor_firm, scope, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
@@ -25,7 +27,7 @@ router.get('/:id', (req, res) => {
   res.json({ ...audit as object, findings });
 });
 
-router.patch('/:id', (req, res) => {
+router.patch('/:id', validate(UpdateAuditSchema), (req, res) => {
   const fields = ['title', 'description', 'type', 'framework_id', 'status', 'auditor', 'auditor_firm', 'scope', 'start_date', 'end_date', 'report_url'];
   const updates: Record<string, unknown> = {};
   for (const f of fields) {
@@ -38,7 +40,7 @@ router.patch('/:id', (req, res) => {
 });
 
 // Findings
-router.post('/:id/findings', (req, res) => {
+router.post('/:id/findings', validate(CreateFindingSchema), (req, res) => {
   const findingId = uuidv4();
   const { control_id, title, description, severity, status, recommendation, management_response, due_date } = req.body;
   db.prepare(`INSERT INTO audit_findings (id, audit_id, control_id, title, description, severity, status, recommendation, management_response, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
@@ -60,7 +62,7 @@ router.post('/:id/findings', (req, res) => {
   res.json(db.prepare('SELECT * FROM audit_findings WHERE id = ?').get(findingId));
 });
 
-router.patch('/findings/:findingId', (req, res) => {
+router.patch('/findings/:findingId', validate(UpdateFindingSchema), (req, res) => {
   const fields = ['title', 'description', 'severity', 'status', 'recommendation', 'management_response', 'due_date', 'remediated_at'];
   const updates: Record<string, unknown> = {};
   for (const f of fields) {

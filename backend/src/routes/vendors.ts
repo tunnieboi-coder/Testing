@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import db from '../db';
 import { v4 as uuidv4 } from 'uuid';
+import { validate } from '../middleware/validate';
+import { CreateVendorSchema, UpdateVendorSchema } from '../schemas';
 
 const router = Router();
 
@@ -16,7 +18,7 @@ router.get('/', (req, res) => {
   res.json(db.prepare(query).all(...params));
 });
 
-router.post('/', (req, res) => {
+router.post('/', validate(CreateVendorSchema), (req, res) => {
   const id = uuidv4();
   const { name, website, description, category, tier, status, risk_rating, contact_name, contact_email, data_types, notes } = req.body;
   db.prepare(`INSERT INTO vendors (id, name, website, description, category, tier, status, risk_rating, contact_name, contact_email, data_types, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
@@ -31,7 +33,7 @@ router.get('/:id', (req, res) => {
   res.json(vendor);
 });
 
-router.patch('/:id', (req, res) => {
+router.patch('/:id', validate(UpdateVendorSchema), (req, res) => {
   const fields = ['name', 'website', 'description', 'category', 'tier', 'status', 'risk_rating', 'contact_name', 'contact_email', 'soc2_report_url', 'iso_cert_url', 'last_review_date', 'next_review_date', 'data_types', 'notes'];
   const updates: Record<string, unknown> = {};
   for (const f of fields) {

@@ -9,9 +9,13 @@
     "seed": "tsx src/seed.ts"
   },
   "dependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^9.4.3",
     "cors": "^2.8.5",
     "express": "^4.18.3",
+    "jsonwebtoken": "^9.0.3",
     "uuid": "^9.0.1",
     "zod": "^3.22.4"
   },

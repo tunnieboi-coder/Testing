@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import db from '../db';
 import { v4 as uuidv4 } from 'uuid';
+import { validate } from '../middleware/validate';
+import { CreatePolicySchema, UpdatePolicySchema } from '../schemas';
 
 const router = Router();
 
@@ -15,7 +17,7 @@ router.get('/', (req, res) => {
   res.json(db.prepare(query).all(...params));
 });
 
-router.post('/', (req, res) => {
+router.post('/', validate(CreatePolicySchema), (req, res) => {
   const id = uuidv4();
   const { title, description, category, status, version, owner, approver, content, review_frequency } = req.body;
   const nextReview = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
@@ -31,7 +33,7 @@ router.get('/:id', (req, res) => {
   res.json(policy);
 });
 
-router.patch('/:id', (req, res) => {
+router.patch('/:id', validate(UpdatePolicySchema), (req, res) => {
   const fields = ['title', 'description', 'category', 'status', 'version', 'owner', 'approver', 'content', 'review_frequency', 'last_reviewed_at', 'next_review_at', 'published_at'];
   const updates: Record<string, unknown> = {};
   for (const f of fields) {
