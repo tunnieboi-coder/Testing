@@ -388,6 +388,46 @@ export function initDb() {
       UNIQUE(system_id, type_id)
     );
 
+    -- Change log for audit trail
+    CREATE TABLE IF NOT EXISTS change_log (
+      id TEXT PRIMARY KEY,
+      entity_type TEXT NOT NULL,   -- 'control' | 'risk' | 'vendor' | 'policy' | 'asset' | 'audit' | 'finding' | 'evidence' | 'system'
+      entity_id TEXT NOT NULL,
+      entity_label TEXT,           -- human-readable name/identifier of the entity
+      action TEXT NOT NULL,        -- 'create' | 'update' | 'delete'
+      field TEXT,                  -- which field changed (null for create/delete)
+      old_value TEXT,
+      new_value TEXT,
+      changed_by TEXT NOT NULL,    -- user id
+      changed_by_name TEXT,        -- user name snapshot
+      changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_change_log_entity ON change_log(entity_type, entity_id);
+    CREATE INDEX IF NOT EXISTS idx_change_log_user ON change_log(changed_by);
+    CREATE INDEX IF NOT EXISTS idx_change_log_at ON change_log(changed_at DESC);
+
+    -- Performance indexes
+    CREATE INDEX IF NOT EXISTS idx_controls_status ON controls(status);
+    CREATE INDEX IF NOT EXISTS idx_controls_framework ON controls(framework_id);
+    CREATE INDEX IF NOT EXISTS idx_controls_family ON controls(family_id);
+    CREATE INDEX IF NOT EXISTS idx_risks_score ON risks(risk_score DESC);
+    CREATE INDEX IF NOT EXISTS idx_risks_status ON risks(status);
+    CREATE INDEX IF NOT EXISTS idx_risks_category ON risks(category);
+    CREATE INDEX IF NOT EXISTS idx_audit_findings_audit ON audit_findings(audit_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_findings_severity ON audit_findings(severity);
+    CREATE INDEX IF NOT EXISTS idx_evidence_status ON evidence(status);
+    CREATE INDEX IF NOT EXISTS idx_control_evidence_control ON control_evidence(control_id);
+    CREATE INDEX IF NOT EXISTS idx_control_evidence_evidence ON control_evidence(evidence_id);
+    CREATE INDEX IF NOT EXISTS idx_vendors_status ON vendors(status);
+    CREATE INDEX IF NOT EXISTS idx_vendors_tier ON vendors(tier);
+    CREATE INDEX IF NOT EXISTS idx_policies_status ON policies(status);
+    CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(type);
+    CREATE INDEX IF NOT EXISTS idx_assets_status ON assets(status);
+    CREATE INDEX IF NOT EXISTS idx_system_controls_system ON system_control_implementations(system_id);
+    CREATE INDEX IF NOT EXISTS idx_compliance_snapshots_fw ON compliance_snapshots(framework_id, snapshot_date);
+    CREATE INDEX IF NOT EXISTS idx_risk_snapshots_date ON risk_snapshots(snapshot_date DESC);
+
     CREATE TABLE IF NOT EXISTS business_questions (
       id TEXT PRIMARY KEY,
       question TEXT NOT NULL,

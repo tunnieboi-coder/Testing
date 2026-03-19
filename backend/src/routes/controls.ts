@@ -3,6 +3,7 @@ import db from '../db';
 import { v4 as uuidv4 } from 'uuid';
 import { validate } from '../middleware/validate';
 import { UpdateControlSchema } from '../schemas';
+import { logFieldChanges } from '../lib/changeLog';
 
 const router = Router();
 
@@ -42,8 +43,10 @@ router.patch('/:id', validate(UpdateControlSchema), (req, res) => {
 
   if (Object.keys(allowed).length === 0) return res.status(400).json({ error: 'No fields to update' });
 
+  const before = db.prepare('SELECT * FROM controls WHERE id = ?').get(req.params.id) as Record<string, unknown>;
   const sets = Object.keys(allowed).map(k => `${k} = ?`).join(', ');
   db.prepare(`UPDATE controls SET ${sets}, updated_at = datetime('now') WHERE id = ?`).run(...Object.values(allowed), req.params.id);
+  logFieldChanges('control', req.params.id, (before?.identifier as string) ?? req.params.id, before, allowed, req.user!);
 
   // Take a compliance snapshot when status changes
   if (status !== undefined) {

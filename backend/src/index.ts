@@ -5,6 +5,7 @@ import { requireAuth } from './middleware/auth';
 
 import authRouter from './routes/auth';
 import businessProfileRouter from './routes/business-profile';
+import changeLogRouter from './routes/changeLog';
 import dashboardRouter from './routes/dashboard';
 import frameworksRouter from './routes/frameworks';
 import controlsRouter from './routes/controls';
@@ -39,6 +40,7 @@ app.get('/api/health', (req, res) => {
 app.use(requireAuth);
 
 app.use('/api/business-profile', businessProfileRouter);
+app.use('/api/change-log', changeLogRouter);
 app.use('/api/dashboard', dashboardRouter);
 app.use('/api/frameworks', frameworksRouter);
 app.use('/api/controls', controlsRouter);

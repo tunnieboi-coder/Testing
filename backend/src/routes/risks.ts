@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { validate } from '../middleware/validate';
 import { CreateRiskSchema, UpdateRiskSchema } from '../schemas';
 import { getBusinessMultiplier } from '../lib/businessMultiplier';
+import { logChange, logFieldChanges } from '../lib/changeLog';
 
 const router = Router();
 
@@ -35,6 +36,7 @@ router.post('/', validate(CreateRiskSchema), (req, res) => {
   db.prepare(`INSERT INTO risks (id, title, description, category, likelihood, impact, owner, treatment, treatment_notes, due_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     id, title, description, category, likelihood, impact, owner, treatment, treatment_notes, due_date
   );
+  logChange({ entityType: 'risk', entityId: id, entityLabel: title, action: 'create', user: req.user! });
   const risk = db.prepare('SELECT * FROM risks WHERE id = ?').get(id) as Record<string, unknown>;
   res.json(withEffectiveScore(risk, getBusinessMultiplier()));
 });
@@ -53,8 +55,10 @@ router.patch('/:id', validate(UpdateRiskSchema), (req, res) => {
     if (req.body[f] !== undefined) updates[f] = req.body[f];
   }
   if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields' });
+  const before = db.prepare('SELECT * FROM risks WHERE id = ?').get(req.params.id) as Record<string, unknown>;
   const sets = Object.keys(updates).map(k => `${k} = ?`).join(', ');
   db.prepare(`UPDATE risks SET ${sets}, updated_at = datetime('now') WHERE id = ?`).run(...Object.values(updates), req.params.id);
+  logFieldChanges('risk', req.params.id, (before?.title as string) ?? req.params.id, before, updates, req.user!);
 
   // Record risk snapshot
   const today = new Date().toISOString().split('T')[0];
@@ -75,8 +79,10 @@ router.patch('/:id', validate(UpdateRiskSchema), (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
+  const risk = db.prepare('SELECT title FROM risks WHERE id = ?').get(req.params.id) as { title: string } | undefined;
   db.prepare('DELETE FROM control_risks WHERE risk_id = ?').run(req.params.id);
   db.prepare('DELETE FROM risks WHERE id = ?').run(req.params.id);
+  logChange({ entityType: 'risk', entityId: req.params.id, entityLabel: risk?.title, action: 'delete', user: req.user! });
   res.json({ success: true });
 });
 

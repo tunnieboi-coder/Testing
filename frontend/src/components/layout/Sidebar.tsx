@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Shield, CheckSquare, AlertTriangle, Users,
   FileText, HardDrive, ClipboardList, Database, Zap, Settings,
-  BarChart3, SlidersHorizontal, Server, FolderLock, Briefcase,
+  BarChart3, SlidersHorizontal, Server, FolderLock, Briefcase, History,
   ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -10,6 +10,7 @@ import { useSystemStore } from '../../store/systemStore';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../lib/api';
 import { useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 
 interface GRCSystem { id: string; name: string; impact_level: string; }
 
@@ -29,6 +30,7 @@ const secondaryNav = [
   { label: 'Integrations', icon: Zap, to: '/integrations' },
   { label: 'Tech Profile', icon: SlidersHorizontal, to: '/profile' },
   { label: 'Business Profile', icon: Briefcase, to: '/business-profile' },
+  { label: 'Audit Trail', icon: History, to: '/audit-trail' },
   { label: 'Reports', icon: BarChart3, to: '/reports' },
 ];
 
@@ -41,6 +43,10 @@ const IMPACT_COLOR: Record<string, string> = {
 export default function Sidebar() {
   const { currentSystemId, setCurrentSystem } = useSystemStore();
   const [systemSelectorOpen, setSystemSelectorOpen] = useState(false);
+  const { user } = useAuth();
+  const initials = user?.name
+    ? user.name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
+    : '?';
 
   const { data: systems = [] } = useQuery<GRCSystem[]>({
     queryKey: ['systems'],
@@ -150,11 +156,11 @@ export default function Sidebar() {
       <div className="px-3 py-4 border-t border-slate-800">
         <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg">
           <div className="w-7 h-7 rounded-full bg-primary-600 flex items-center justify-center text-xs font-semibold text-white flex-shrink-0">
-            AC
+            {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-slate-200 truncate">Alex Chen</div>
-            <div className="text-xs text-slate-500 truncate">Admin</div>
+            <div className="text-sm font-medium text-slate-200 truncate">{user?.name ?? '—'}</div>
+            <div className="text-xs text-slate-500 truncate capitalize">{user?.role?.replace('_', ' ') ?? ''}</div>
           </div>
           <Settings size={14} className="text-slate-500 flex-shrink-0" />
         </div>

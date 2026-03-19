@@ -3,6 +3,7 @@ import db from '../db';
 import { v4 as uuidv4 } from 'uuid';
 import { validate } from '../middleware/validate';
 import { CreatePolicySchema, UpdatePolicySchema } from '../schemas';
+import { logChange, logFieldChanges } from '../lib/changeLog';
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.post('/', validate(CreatePolicySchema), (req, res) => {
   db.prepare(`INSERT INTO policies (id, title, description, category, status, version, owner, approver, content, review_frequency, next_review_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     id, title, description, category, status || 'draft', version || '1.0', owner, approver, content, review_frequency || 'annual', nextReview
   );
+  logChange({ entityType: 'policy', entityId: id, entityLabel: title, action: 'create', user: req.user! });
   res.json(db.prepare('SELECT * FROM policies WHERE id = ?').get(id));
 });
 
@@ -43,13 +45,17 @@ router.patch('/:id', validate(UpdatePolicySchema), (req, res) => {
     updates.published_at = new Date().toISOString();
   }
   if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields' });
+  const before = db.prepare('SELECT * FROM policies WHERE id = ?').get(req.params.id) as Record<string, unknown>;
   const sets = Object.keys(updates).map(k => `${k} = ?`).join(', ');
   db.prepare(`UPDATE policies SET ${sets}, updated_at = datetime('now') WHERE id = ?`).run(...Object.values(updates), req.params.id);
+  logFieldChanges('policy', req.params.id, (before?.title as string) ?? req.params.id, before, updates, req.user!);
   res.json(db.prepare('SELECT * FROM policies WHERE id = ?').get(req.params.id));
 });
 
 router.delete('/:id', (req, res) => {
+  const policy = db.prepare('SELECT title FROM policies WHERE id = ?').get(req.params.id) as { title: string } | undefined;
   db.prepare('DELETE FROM policies WHERE id = ?').run(req.params.id);
+  logChange({ entityType: 'policy', entityId: req.params.id, entityLabel: policy?.title, action: 'delete', user: req.user! });
   res.json({ success: true });
 });
 
