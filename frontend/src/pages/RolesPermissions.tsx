@@ -8,8 +8,8 @@ interface RolesResponse {
   sodConflicts: { role: string; resource: string; forbidden: string; reason: string }[];
 }
 
-const ALL_RESOURCES = ['control', 'risk', 'audit', 'finding', 'policy', 'evidence', 'vendor', 'asset', 'user', 'system'];
-const ALL_ACTIONS = ['create', 'read', 'update', 'delete', 'approve', 'publish', 'assign', 'remediate'];
+const ALL_RESOURCES = ['control', 'risk', 'audit', 'finding', 'policy', 'evidence', 'vendor', 'asset', 'ato', 'user', 'system'];
+const ALL_ACTIONS = ['create', 'read', 'update', 'delete', 'approve', 'publish', 'assign', 'remediate', 'sign', 'generate'];
 
 const ROLE_DESC: Record<string, string> = {
   admin:              'User & system management only',
@@ -18,8 +18,11 @@ const ROLE_DESC: Record<string, string> = {
   risk_approver:      'Approves risk treatment; cannot create',
   auditor:            'Creates audits & findings; cannot remediate',
   control_owner:      'Implements controls, uploads evidence; cannot approve',
-  reviewer:           'Approves evidence, controls, and remediates findings',
-  viewer:             'Read-only access across all resources',
+  reviewer:             'Approves evidence, controls, and remediates findings',
+  viewer:               'Read-only access across all resources',
+  system_owner:         'Owns ATO package, signs first, manages system info',
+  isso:                 'Security officer — creates ATO packages and documents, certifies',
+  authorizing_official: 'Grants or denies ATO; final signature authority',
 };
 
 const ROLE_COLOR: Record<string, string> = {
@@ -29,8 +32,11 @@ const ROLE_COLOR: Record<string, string> = {
   risk_approver:      'bg-yellow-900/30 text-yellow-300 border-yellow-800',
   auditor:            'bg-cyan-900/30 text-cyan-300 border-cyan-800',
   control_owner:      'bg-teal-900/30 text-teal-300 border-teal-800',
-  reviewer:           'bg-emerald-900/30 text-emerald-300 border-emerald-800',
-  viewer:             'bg-slate-800 text-slate-400 border-slate-700',
+  reviewer:             'bg-emerald-900/30 text-emerald-300 border-emerald-800',
+  viewer:               'bg-slate-800 text-slate-400 border-slate-700',
+  system_owner:         'bg-indigo-900/30 text-indigo-300 border-indigo-800',
+  isso:                 'bg-fuchsia-900/30 text-fuchsia-300 border-fuchsia-800',
+  authorizing_official: 'bg-rose-900/30 text-rose-300 border-rose-800',
 };
 
 function ActionDot({ has }: { has: boolean }) {

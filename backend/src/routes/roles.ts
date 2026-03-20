@@ -21,12 +21,17 @@ router.get('/', (req, res) => {
 
   // SoD conflict pairs — informational, shown in the UI
   const sodConflicts = [
-    { role: 'auditor',      resource: 'finding', forbidden: 'remediate', reason: 'Auditors who create findings cannot remediate them' },
-    { role: 'risk_owner',   resource: 'risk',    forbidden: 'approve',   reason: 'Risk owners who propose treatment cannot approve it' },
-    { role: 'control_owner',resource: 'control', forbidden: 'approve',   reason: 'Control owners who submit evidence cannot approve it' },
-    { role: 'control_owner',resource: 'evidence',forbidden: 'approve',   reason: 'Evidence submitters cannot approve their own evidence' },
-    { role: 'admin',        resource: 'risk',    forbidden: 'create',    reason: 'Admins manage users/systems, not operational GRC' },
-    { role: 'admin',        resource: 'finding', forbidden: 'create',    reason: 'Admins manage users/systems, not operational GRC' },
+    { role: 'auditor',              resource: 'finding', forbidden: 'remediate', reason: 'Auditors who create findings cannot remediate them' },
+    { role: 'risk_owner',           resource: 'risk',    forbidden: 'approve',   reason: 'Risk owners who propose treatment cannot approve it' },
+    { role: 'control_owner',        resource: 'control', forbidden: 'approve',   reason: 'Control owners who submit evidence cannot approve it' },
+    { role: 'control_owner',        resource: 'evidence',forbidden: 'approve',   reason: 'Evidence submitters cannot approve their own evidence' },
+    { role: 'admin',                resource: 'risk',    forbidden: 'create',    reason: 'Admins manage users/systems, not operational GRC' },
+    { role: 'admin',                resource: 'finding', forbidden: 'create',    reason: 'Admins manage users/systems, not operational GRC' },
+    // ATO-specific SoD
+    { role: 'isso',                 resource: 'ato',     forbidden: 'approve',   reason: 'ISSO certifies completeness; only the AO can grant authorization' },
+    { role: 'system_owner',         resource: 'ato',     forbidden: 'approve',   reason: 'System Owner acknowledges; AO grants the actual authorization' },
+    { role: 'authorizing_official', resource: 'ato',     forbidden: 'create',    reason: 'AO reviews packages; ISSO creates and manages them' },
+    { role: 'authorizing_official', resource: 'ato',     forbidden: 'generate',  reason: 'AO reviews documents; ISSO generates them' },
   ];
 
   res.json({ roles: ALL_ROLES, matrix, sodConflicts });

@@ -155,6 +155,76 @@ export function initDb() {
     CREATE INDEX IF NOT EXISTS idx_policy_ack_policy ON policy_acknowledgments(policy_id);
     CREATE INDEX IF NOT EXISTS idx_policy_ack_user ON policy_acknowledgments(user_id);
 
+    -- ── ATO (Authority to Operate) ────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS ato_packages (
+      id TEXT PRIMARY KEY,
+      system_id TEXT REFERENCES systems(id),
+      title TEXT NOT NULL,
+      package_type TEXT NOT NULL DEFAULT 'full_ato', -- 'full_ato' | 'interim_ato' | 'ato_renewal' | 'continuous_monitoring'
+      impact_level TEXT NOT NULL DEFAULT 'moderate', -- 'low' | 'moderate' | 'high'
+      status TEXT NOT NULL DEFAULT 'in_progress', -- 'in_progress' | 'submitted' | 'under_review' | 'approved' | 'denied' | 'expired'
+      authorization_boundary TEXT,
+      system_owner_id TEXT,
+      system_owner_name TEXT,
+      isso_id TEXT,
+      isso_name TEXT,
+      authorizing_official_id TEXT,
+      authorizing_official_name TEXT,
+      submission_date TEXT,
+      decision_date TEXT,
+      expiration_date TEXT,   -- ATO typically valid 3 years
+      denial_reason TEXT,
+      notes TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Ordered signature workflow: system_owner → isso → authorizing_official
+    CREATE TABLE IF NOT EXISTS ato_signatures (
+      id TEXT PRIMARY KEY,
+      ato_package_id TEXT NOT NULL REFERENCES ato_packages(id) ON DELETE CASCADE,
+      role TEXT NOT NULL,          -- 'system_owner' | 'isso' | 'authorizing_official'
+      signature_order INTEGER NOT NULL, -- 1 = first signer, 2 = second, 3 = final
+      user_id TEXT,
+      user_name TEXT,
+      user_email TEXT,
+      status TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'signed' | 'rejected'
+      signed_at TEXT,
+      rejected_at TEXT,
+      rejection_reason TEXT,
+      ip_address TEXT,             -- for audit trail
+      UNIQUE(ato_package_id, role)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ato_sig_pkg ON ato_signatures(ato_package_id);
+
+    -- Generated ATO documents (SSP, RAR, SAR, ATO Letter, POA&M, etc.)
+    CREATE TABLE IF NOT EXISTS ato_documents (
+      id TEXT PRIMARY KEY,
+      ato_package_id TEXT NOT NULL REFERENCES ato_packages(id) ON DELETE CASCADE,
+      document_type TEXT NOT NULL, -- 'ssp' | 'rar' | 'sar' | 'ato_letter' | 'poam' | 'iscp' | 'pia' | 'cis' | 'sctm'
+      title TEXT NOT NULL,
+      content TEXT,                -- full markdown content
+      status TEXT NOT NULL DEFAULT 'draft', -- 'draft' | 'generated' | 'final'
+      version TEXT NOT NULL DEFAULT '1.0',
+      generated_at TEXT,
+      generated_by TEXT,           -- 'ai' or user id
+      llm_model TEXT,              -- which model generated this (e.g. 'claude-sonnet-4-6')
+      word_count INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ato_doc_pkg ON ato_documents(ato_package_id);
+
+    -- App-level settings (LLM selection, etc.)
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     -- Segregation of Duties: per-action permission table
     -- Each role has a set of allowed actions. Conflicting actions (e.g. create+approve)
     -- are intentionally assigned to different roles to enforce SoD.
@@ -621,11 +691,82 @@ export function initDb() {
       { role: 'viewer', resource: 'policy',   action: 'read' },
       { role: 'viewer', resource: 'vendor',   action: 'read' },
       { role: 'viewer', resource: 'asset',    action: 'read' },
+      // ── system_owner: manages system info, owns ATO package, signs first ──
+      { role: 'system_owner', resource: 'system',   action: 'read'      },
+      { role: 'system_owner', resource: 'system',   action: 'update'    },
+      { role: 'system_owner', resource: 'control',  action: 'read'      },
+      { role: 'system_owner', resource: 'control',  action: 'update'    },
+      { role: 'system_owner', resource: 'control',  action: 'assign'    },
+      { role: 'system_owner', resource: 'risk',     action: 'read'      },
+      { role: 'system_owner', resource: 'risk',     action: 'create'    },
+      { role: 'system_owner', resource: 'risk',     action: 'update'    },
+      { role: 'system_owner', resource: 'evidence', action: 'create'    },
+      { role: 'system_owner', resource: 'evidence', action: 'read'      },
+      { role: 'system_owner', resource: 'policy',   action: 'read'      },
+      { role: 'system_owner', resource: 'audit',    action: 'read'      },
+      { role: 'system_owner', resource: 'finding',  action: 'read'      },
+      { role: 'system_owner', resource: 'vendor',   action: 'read'      },
+      { role: 'system_owner', resource: 'ato',      action: 'read'      },
+      { role: 'system_owner', resource: 'ato',      action: 'update'    },
+      { role: 'system_owner', resource: 'ato',      action: 'sign'      }, // signs ATO package
+      // ── isso: security officer; creates & manages ATO package, certifies ──
+      { role: 'isso', resource: 'system',   action: 'read'      },
+      { role: 'isso', resource: 'system',   action: 'update'    },
+      { role: 'isso', resource: 'control',  action: 'create'    },
+      { role: 'isso', resource: 'control',  action: 'read'      },
+      { role: 'isso', resource: 'control',  action: 'update'    },
+      { role: 'isso', resource: 'control',  action: 'approve'   },
+      { role: 'isso', resource: 'risk',     action: 'create'    },
+      { role: 'isso', resource: 'risk',     action: 'read'      },
+      { role: 'isso', resource: 'risk',     action: 'update'    },
+      { role: 'isso', resource: 'risk',     action: 'approve'   },
+      { role: 'isso', resource: 'evidence', action: 'create'    },
+      { role: 'isso', resource: 'evidence', action: 'read'      },
+      { role: 'isso', resource: 'evidence', action: 'approve'   },
+      { role: 'isso', resource: 'policy',   action: 'create'    },
+      { role: 'isso', resource: 'policy',   action: 'read'      },
+      { role: 'isso', resource: 'policy',   action: 'update'    },
+      { role: 'isso', resource: 'policy',   action: 'publish'   },
+      { role: 'isso', resource: 'audit',    action: 'create'    },
+      { role: 'isso', resource: 'audit',    action: 'read'      },
+      { role: 'isso', resource: 'audit',    action: 'update'    },
+      { role: 'isso', resource: 'finding',  action: 'create'    },
+      { role: 'isso', resource: 'finding',  action: 'read'      },
+      { role: 'isso', resource: 'finding',  action: 'update'    },
+      { role: 'isso', resource: 'finding',  action: 'remediate' },
+      { role: 'isso', resource: 'vendor',   action: 'read'      },
+      { role: 'isso', resource: 'vendor',   action: 'update'    },
+      { role: 'isso', resource: 'ato',      action: 'create'    },
+      { role: 'isso', resource: 'ato',      action: 'read'      },
+      { role: 'isso', resource: 'ato',      action: 'update'    },
+      { role: 'isso', resource: 'ato',      action: 'delete'    },
+      { role: 'isso', resource: 'ato',      action: 'sign'      }, // certifies the package
+      { role: 'isso', resource: 'ato',      action: 'generate'  }, // generates documents
+      // ── authorizing_official: reviews & grants ATO; final signer ──────────
+      { role: 'authorizing_official', resource: 'system',   action: 'read'    },
+      { role: 'authorizing_official', resource: 'control',  action: 'read'    },
+      { role: 'authorizing_official', resource: 'risk',     action: 'read'    },
+      { role: 'authorizing_official', resource: 'risk',     action: 'approve' },
+      { role: 'authorizing_official', resource: 'evidence', action: 'read'    },
+      { role: 'authorizing_official', resource: 'evidence', action: 'approve' },
+      { role: 'authorizing_official', resource: 'policy',   action: 'read'    },
+      { role: 'authorizing_official', resource: 'audit',    action: 'read'    },
+      { role: 'authorizing_official', resource: 'finding',  action: 'read'    },
+      { role: 'authorizing_official', resource: 'vendor',   action: 'read'    },
+      { role: 'authorizing_official', resource: 'ato',      action: 'read'    },
+      { role: 'authorizing_official', resource: 'ato',      action: 'approve' }, // grants/denies ATO
+      { role: 'authorizing_official', resource: 'ato',      action: 'sign'    }, // final authoritative signature
     ];
     for (const p of PERMISSIONS) {
       db.prepare(`INSERT OR IGNORE INTO role_permissions (id, role, resource, action) VALUES (?, ?, ?, ?)`)
         .run(uuidv4rp(), p.role, p.resource, p.action);
     }
+  }
+
+  // Seed default LLM setting
+  const llmSetting = db.prepare("SELECT key FROM app_settings WHERE key = 'llm_model'").get();
+  if (!llmSetting) {
+    db.prepare("INSERT INTO app_settings (key, value) VALUES ('llm_model', 'claude-sonnet-4-6')").run();
   }
 
   // Seed default admin user if none exists

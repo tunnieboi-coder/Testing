@@ -65,5 +65,17 @@ export function requirePermission(resource: string, action: string) {
   };
 }
 
-export const ALL_ROLES = ['admin', 'compliance_manager', 'risk_owner', 'risk_approver', 'auditor', 'control_owner', 'reviewer', 'viewer'] as const;
+export const ALL_ROLES = [
+  'admin',
+  'compliance_manager',
+  'risk_owner',
+  'risk_approver',
+  'auditor',
+  'control_owner',
+  'reviewer',
+  'viewer',
+  'system_owner',
+  'isso',
+  'authorizing_official',
+] as const;
 export type AppRole = typeof ALL_ROLES[number];

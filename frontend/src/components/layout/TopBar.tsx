@@ -16,6 +16,7 @@ const titles: Record<string, string> = {
   '/profile': 'Technical Profile',
   '/business-profile': 'Business Risk Profile',
   '/roles': 'Roles & Permissions',
+  '/ato': 'ATO Packages',
   '/audit-trail': 'Audit Trail',
   '/reports': 'Reports & Analytics',
 };

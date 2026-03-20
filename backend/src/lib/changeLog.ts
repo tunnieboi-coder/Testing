@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import db from '../db';
 import { AuthUser } from '../middleware/auth';
 
-type Action = 'create' | 'update' | 'delete';
+type Action = 'create' | 'update' | 'delete' | 'approved' | 'denied' | 'signed' | 'rejected';
 
 interface LogEntry {
   entityType: string;
