@@ -763,10 +763,13 @@ export function initDb() {
     }
   }
 
-  // Seed default LLM setting
-  const llmSetting = db.prepare("SELECT key FROM app_settings WHERE key = 'llm_model'").get();
-  if (!llmSetting) {
-    db.prepare("INSERT INTO app_settings (key, value) VALUES ('llm_model', 'claude-sonnet-4-6')").run();
+  // Seed default app settings
+  const settingDefaults: Record<string, string> = {
+    llm_model:     'claude-sonnet-4-6',
+    login_banner:  '',
+  };
+  for (const [key, value] of Object.entries(settingDefaults)) {
+    db.prepare('INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
   }
 
   // Seed default admin user if none exists

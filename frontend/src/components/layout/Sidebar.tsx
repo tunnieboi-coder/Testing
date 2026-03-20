@@ -32,6 +32,7 @@ const secondaryNav = [
   { label: 'Tech Profile', icon: SlidersHorizontal, to: '/profile' },
   { label: 'Business Profile', icon: Briefcase, to: '/business-profile' },
   { label: 'Roles & Permissions', icon: ShieldCheck, to: '/roles' },
+  { label: 'Platform Settings', icon: Settings, to: '/settings' },
   { label: 'Audit Trail', icon: History, to: '/audit-trail' },
   { label: 'Reports', icon: BarChart3, to: '/reports' },
 ];

@@ -90,4 +90,10 @@ router.post('/users', requireAuth, validate(CreateUserSchema), (req, res) => {
   res.status(201).json(db.prepare('SELECT id, email, name, role, department, active, created_at FROM users WHERE id = ?').get(id));
 });
 
+// GET /api/auth/banner — public, no auth (shown on login page before credentials entered)
+router.get('/banner', (req, res) => {
+  const row = db.prepare("SELECT value FROM app_settings WHERE key = 'login_banner'").get() as { value: string } | undefined;
+  res.json({ message: row?.value ?? '' });
+});
+
 export default router;

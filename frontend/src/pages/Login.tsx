@@ -1,6 +1,6 @@
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Shield, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Shield, Eye, EyeOff, AlertCircle, Info } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
@@ -12,6 +12,15 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [banner, setBanner] = useState('');
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/auth/banner')
+      .then(r => r.json())
+      .then((d: { message: string }) => setBanner(d.message ?? ''))
+      .catch(() => {});
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -50,6 +59,21 @@ export default function Login() {
             <p className="text-xs text-slate-400">Governance, Risk & Compliance</p>
           </div>
         </div>
+
+        {/* Login Banner */}
+        {banner && !bannerDismissed && (
+          <div className="flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 mb-5 text-amber-300 text-sm">
+            <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <p className="flex-1 whitespace-pre-wrap leading-relaxed">{banner}</p>
+            <button
+              onClick={() => setBannerDismissed(true)}
+              className="text-amber-500 hover:text-amber-300 text-xs ml-2 shrink-0"
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Card */}
         <div className="bg-slate-900 border border-slate-700 rounded-xl p-8">

@@ -25,6 +25,7 @@ import AuditTrail from './pages/AuditTrail';
 import RolesPermissions from './pages/RolesPermissions';
 import ATOPackages from './pages/ATOPackages';
 import ATOPackageDetail from './pages/ATOPackageDetail';
+import PlatformSettings from './pages/PlatformSettings';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -88,6 +89,7 @@ function AppRoutes() {
         <Route path="roles" element={<RolesPermissions />} />
         <Route path="ato" element={<ATOPackages />} />
         <Route path="ato/:id" element={<ATOPackageDetail />} />
+        <Route path="settings" element={<PlatformSettings />} />
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
